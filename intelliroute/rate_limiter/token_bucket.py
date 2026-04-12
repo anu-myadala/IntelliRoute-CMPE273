@@ -133,7 +133,33 @@ class RateLimiterStore:
                 return None
             return bucket.tokens, bucket.capacity
 
+    def set_leader(self, leader_id: str) -> None:
+        """Update the leader identity (called after an election)."""
+        with self._lock:
+            self._leader_id = leader_id
+
+    def replay_log_entry(
+        self, ts: float, key: str, amount: float, allowed: bool
+    ) -> None:
+        """Replay a leader's log entry on a follower replica.
+
+        Applies the state change without re-evaluating the bucket, so the
+        follower converges toward the leader's state.
+        """
+        with self._lock:
+            bucket = self._ensure_bucket(key)
+            if allowed:
+                bucket._refill(ts)
+                bucket.tokens = max(0.0, bucket.tokens - amount)
+                bucket.updated_at = ts
+            self._log.append((ts, key, amount, allowed))
+
     def replication_log(self) -> list[tuple[float, str, float, bool]]:
         """Return a shallow copy of the replication log for followers."""
         with self._lock:
             return list(self._log)
+
+    def log_length(self) -> int:
+        """Return the current length of the replication log."""
+        with self._lock:
+            return len(self._log)

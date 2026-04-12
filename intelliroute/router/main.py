@@ -33,14 +33,20 @@ from ..common.models import (
     ProviderInfo,
     RateLimitCheck,
 )
+from .feedback import CompletionOutcome, FeedbackCollector
 from .intent import classify
 from .policy import RoutingPolicy
+from .queue import Priority, RequestQueue
 from .registry import ProviderRegistry
 
 log = get_logger("router")
 
 registry = ProviderRegistry()
-policy = RoutingPolicy()
+feedback = FeedbackCollector()
+policy = RoutingPolicy(feedback=feedback)
+request_queue = RequestQueue()
+
+_WORKER_COUNT = 4
 
 app = FastAPI(title="IntelliRoute Router")
 
@@ -53,6 +59,9 @@ async def _startup() -> None:
     _http = httpx.AsyncClient(timeout=5.0)
     # Auto-register the three mock providers if the env vars are set.
     _bootstrap_mock_registry()
+    # Start background workers that drain the priority queue.
+    for _ in range(_WORKER_COUNT):
+        asyncio.create_task(_queue_worker())
 
 
 @app.on_event("shutdown")
@@ -204,9 +213,8 @@ async def decide(req: CompletionRequest) -> RouteDecision:
     )
 
 
-@app.post("/complete", response_model=CompletionResponse)
-async def complete(req: CompletionRequest) -> CompletionResponse:
-    request_id = str(uuid.uuid4())
+async def _execute_completion(req: CompletionRequest, request_id: str) -> CompletionResponse:
+    """Core routing logic: rank providers, try each in order, return response."""
     intent = classify(req)
     health = await _fetch_health_snapshot()
     ranked = policy.rank(
@@ -234,6 +242,9 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
         asyncio.create_task(_report_health(info.name, ok, latency_ms))
         if not ok:
             log_event(log, "provider_failed", provider=info.name, latency_ms=latency_ms)
+            feedback.record(CompletionOutcome(
+                provider=info.name, latency_ms=latency_ms, success=False,
+            ))
             last_error = f"provider_failed:{info.name}"
             fallback_used = True
             continue
@@ -242,6 +253,17 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
         completion_tokens = int(data.get("completion_tokens", 0))
         total_tokens = prompt_tokens + completion_tokens
         estimated_cost = (total_tokens / 1000.0) * info.cost_per_1k_tokens
+
+        prompt_text = " ".join(m.content for m in req.messages)
+        feedback.record(CompletionOutcome(
+            provider=info.name,
+            latency_ms=latency_ms,
+            success=True,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            prompt_char_count=len(prompt_text),
+            response_char_count=len(data.get("content", "")),
+        ))
 
         asyncio.create_task(
             _publish_cost(
@@ -273,3 +295,58 @@ async def complete(req: CompletionRequest) -> CompletionResponse:
         )
 
     raise HTTPException(status_code=503, detail=f"all providers failed: {last_error}")
+
+
+async def _queue_worker() -> None:
+    """Background worker: pulls from the priority queue and executes."""
+    while True:
+        item = await request_queue.dequeue()
+        try:
+            result = await _execute_completion(item.request, item.request_id)
+            if not item.future.done():
+                item.future.set_result(result)
+        except Exception as exc:
+            if not item.future.done():
+                item.future.set_exception(exc)
+
+
+@app.post("/complete", response_model=CompletionResponse)
+async def complete(req: CompletionRequest) -> CompletionResponse:
+    request_id = str(uuid.uuid4())
+    intent = classify(req)
+    priority = request_queue.intent_to_priority(intent)
+
+    # HIGH priority: bypass the queue and execute immediately.
+    if priority == Priority.HIGH:
+        return await _execute_completion(req, request_id)
+
+    # MEDIUM / LOW: enqueue and wait for a worker to process it.
+    accepted, item, reason = request_queue.try_enqueue(req, request_id, intent)
+    if not accepted:
+        log_event(log, "load_shed", request_id=request_id, reason=reason,
+                  intent=intent.value)
+        raise HTTPException(status_code=429, detail=f"load_shed: {reason}")
+
+    try:
+        return await asyncio.wait_for(
+            item.future, timeout=request_queue._config.timeout_ms / 1000.0
+        )
+    except asyncio.TimeoutError:
+        request_queue.record_timeout()
+        raise HTTPException(status_code=504, detail="queue_timeout")
+
+
+@app.get("/feedback")
+async def get_feedback() -> dict:
+    """Expose current feedback metrics for observability."""
+    from dataclasses import asdict
+    return {
+        "metrics": {k: asdict(v) for k, v in feedback.all_metrics().items()}
+    }
+
+
+@app.get("/queue/stats")
+async def queue_stats() -> dict:
+    """Expose current queue statistics for observability."""
+    from dataclasses import asdict
+    return asdict(request_queue.stats())
