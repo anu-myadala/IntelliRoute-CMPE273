@@ -26,8 +26,10 @@ straightforward to unit test against a fixed fixture.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from ..common.models import Intent, ProviderHealth, ProviderInfo
+from .feedback import FeedbackCollector
 
 
 @dataclass
@@ -70,8 +72,13 @@ class ScoredProvider:
 
 
 class RoutingPolicy:
-    def __init__(self, intent_weights: dict[Intent, Weights] | None = None) -> None:
+    def __init__(
+        self,
+        intent_weights: dict[Intent, Weights] | None = None,
+        feedback: Optional[FeedbackCollector] = None,
+    ) -> None:
         self._weights = intent_weights or INTENT_WEIGHTS
+        self._feedback = feedback
 
     def rank(
         self,
@@ -107,8 +114,22 @@ class RoutingPolicy:
         scored: list[ScoredProvider] = []
         for p in usable:
             h = health.get(p.name)
-            latency_est = h.avg_latency_ms if h and h.avg_latency_ms > 0 else p.typical_latency_ms
-            success_score = 1.0 - (h.error_rate if h else 0.0)
+            fb = self._feedback.get_metrics(p.name) if self._feedback else None
+
+            # Latency: prefer feedback EMA > health monitor > static config.
+            if fb and fb.sample_count > 0 and fb.latency_ema > 0:
+                latency_est = fb.latency_ema
+            elif h and h.avg_latency_ms > 0:
+                latency_est = h.avg_latency_ms
+            else:
+                latency_est = p.typical_latency_ms
+
+            # Success: prefer feedback EMA > health monitor error rate.
+            if fb and fb.sample_count > 0:
+                success_score = fb.success_rate_ema
+            else:
+                success_score = 1.0 - (h.error_rate if h else 0.0)
+
             capability_score = p.capability.get(intent.value, 0.5)
 
             latency_score = _normalize_latency(latency_est, worst_latency)
@@ -126,6 +147,11 @@ class RoutingPolicy:
                 + weights.capability * capability_score
                 + weights.success * success_score
             )
+
+            # Anomaly penalty: penalise providers producing anomalous outputs.
+            if fb and fb.anomaly_score > 0:
+                score -= 0.1 * fb.anomaly_score
+
             scored.append(
                 ScoredProvider(
                     provider=p,

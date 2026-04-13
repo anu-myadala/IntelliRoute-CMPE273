@@ -78,6 +78,9 @@ class _Stack:
         env["INTELLIROUTE_MOCK_FAST_PORT"] = str(self.ports["mock_fast"])
         env["INTELLIROUTE_MOCK_SMART_PORT"] = str(self.ports["mock_smart"])
         env["INTELLIROUTE_MOCK_CHEAP_PORT"] = str(self.ports["mock_cheap"])
+        # Single-replica election config (no peers) for integration tests
+        env["RATE_LIMITER_REPLICA_ID"] = "rl-0"
+        env["RATE_LIMITER_PEERS"] = ""
         return env
 
     def _spawn_uvicorn(self, module: str, port: int, extra_env: dict | None = None) -> None:
@@ -291,3 +294,46 @@ def test_cost_tracker_reflects_tenant_spend(stack):
 def test_unauthenticated_request_is_rejected(stack):
     r = httpx.post(f"{stack.gateway_url}/v1/complete", json=_interactive_request(), timeout=5.0)
     assert r.status_code == 401
+
+
+# ---- New feature integration tests ----
+
+
+def test_feedback_metrics_populated_after_completions(stack):
+    """After sending completions, the /feedback endpoint should have EMA data."""
+    # Send a couple of requests to populate feedback
+    httpx.post(f"{stack.gateway_url}/v1/complete", json=_interactive_request(),
+               headers=_headers(), timeout=10.0)
+    httpx.post(f"{stack.gateway_url}/v1/complete", json=_batch_request(),
+               headers=_headers(), timeout=10.0)
+    time.sleep(0.2)
+
+    r = httpx.get(f"{stack.router_url}/feedback", timeout=5.0)
+    assert r.status_code == 200
+    data = r.json()
+    metrics = data.get("metrics", {})
+    assert len(metrics) >= 1
+    # Check that at least one provider has samples
+    any_sampled = any(m["sample_count"] > 0 for m in metrics.values())
+    assert any_sampled
+
+
+def test_queue_stats_endpoint(stack):
+    """The /queue/stats endpoint should return valid stats."""
+    r = httpx.get(f"{stack.router_url}/queue/stats", timeout=5.0)
+    assert r.status_code == 200
+    data = r.json()
+    assert "total_depth" in data
+    assert "by_priority" in data
+    assert "shed_count" in data
+    assert "timeout_count" in data
+
+
+def test_election_status_shows_leader(stack):
+    """The rate limiter should report itself as leader (single replica)."""
+    r = httpx.get(f"{stack.rate_limiter_url}/election/status", timeout=5.0)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"] == "leader"
+    assert data["replica_id"] == "rl-0"
+    assert data["current_leader"] == "rl-0"

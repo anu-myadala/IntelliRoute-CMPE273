@@ -96,3 +96,32 @@ def test_store_logs_decisions_for_replication():
     log = store.replication_log()
     assert len(log) == 3
     assert [entry[3] for entry in log] == [True, True, False]
+
+
+def test_set_leader_changes_leader_id():
+    clock = FakeClock()
+    store = RateLimiterStore(
+        default_config=BucketConfig(capacity=10, refill_rate=1),
+        clock=clock,
+    )
+    assert store.leader_id == "leader-0"
+    store.set_leader("rl-2")
+    assert store.leader_id == "rl-2"
+
+
+def test_replay_log_entry_applies_state():
+    clock = FakeClock()
+    store = RateLimiterStore(
+        default_config=BucketConfig(capacity=10, refill_rate=1),
+        clock=clock,
+    )
+    # Replay an "allowed" entry that consumed 3 tokens at time 1.0
+    store.replay_log_entry(ts=1.0, key="t|p", amount=3.0, allowed=True)
+    # The bucket should have 10 (capacity) - 3 = 7 tokens
+    snap = store.snapshot("t|p")
+    assert snap is not None
+    tokens, capacity = snap
+    assert abs(tokens - 7.0) < 0.01
+    assert capacity == 10.0
+    # Log should contain the replayed entry
+    assert store.log_length() == 1

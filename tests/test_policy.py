@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from intelliroute.common.models import Intent, ProviderHealth, ProviderInfo
+from intelliroute.router.feedback import CompletionOutcome, FeedbackCollector
 from intelliroute.router.policy import RoutingPolicy
 
 
@@ -88,3 +89,65 @@ def test_ranking_is_deterministic_and_stable():
 def test_empty_provider_list_returns_empty():
     policy = RoutingPolicy()
     assert policy.rank([], health={}, intent=Intent.INTERACTIVE) == []
+
+
+# ---- Feedback integration tests ----
+
+
+def test_policy_uses_feedback_latency_over_static():
+    """When feedback reports different latencies than static config, the
+    ranking should shift accordingly."""
+    fc = FeedbackCollector(alpha=1.0)
+    # Record very fast latency for 'smart' (static is 900ms)
+    fc.record(CompletionOutcome(
+        provider="smart", latency_ms=50.0, success=True,
+        prompt_tokens=50, completion_tokens=25,
+        prompt_char_count=200, response_char_count=100,
+    ))
+    # Record degraded latency for 'fast' (static is 150ms)
+    fc.record(CompletionOutcome(
+        provider="fast", latency_ms=800.0, success=True,
+        prompt_tokens=50, completion_tokens=25,
+        prompt_char_count=200, response_char_count=100,
+    ))
+
+    policy_fb = RoutingPolicy(feedback=fc)
+    policy_no = RoutingPolicy()
+
+    ranked_fb = policy_fb.rank(_providers(), health={}, intent=Intent.INTERACTIVE)
+    ranked_no = policy_no.rank(_providers(), health={}, intent=Intent.INTERACTIVE)
+
+    # Without feedback, fast wins interactive (lowest static latency)
+    assert ranked_no[0].provider.name == "fast"
+    # With feedback, fast's latency score plummets and smart overtakes it
+    assert ranked_fb[0].provider.name != "fast"
+
+
+def test_policy_penalises_anomalous_provider():
+    """A provider with a high anomaly score should be demoted."""
+    fc = FeedbackCollector(alpha=1.0)
+    # Record an extremely anomalous response for 'fast'
+    fc.record(CompletionOutcome(
+        provider="fast", latency_ms=50.0, success=True,
+        prompt_tokens=50, completion_tokens=25,
+        prompt_char_count=10, response_char_count=10000,  # very long vs prompt
+    ))
+    policy_fb = RoutingPolicy(feedback=fc)
+    policy_no = RoutingPolicy()  # no feedback
+
+    ranked_fb = policy_fb.rank(_providers(), health={}, intent=Intent.INTERACTIVE)
+    ranked_no = policy_no.rank(_providers(), health={}, intent=Intent.INTERACTIVE)
+
+    # With no feedback, fast is first for interactive
+    assert ranked_no[0].provider.name == "fast"
+    # Score for fast should be lower with the anomaly penalty
+    fast_score_fb = next(s.score for s in ranked_fb if s.provider.name == "fast")
+    fast_score_no = next(s.score for s in ranked_no if s.provider.name == "fast")
+    assert fast_score_fb < fast_score_no
+
+
+def test_policy_falls_back_to_static_without_feedback():
+    """When feedback is None, the policy behaves identically to before."""
+    policy = RoutingPolicy(feedback=None)
+    ranked = policy.rank(_providers(), health={}, intent=Intent.INTERACTIVE)
+    assert ranked[0].provider.name == "fast"

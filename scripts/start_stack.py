@@ -50,7 +50,33 @@ SERVICES = [
             "MOCK_FAILURE_RATE": "0.0", "MOCK_COST_PER_1K": "0.0003",
         },
     },
-    {"module": "intelliroute.rate_limiter.main:app",   "port_env": "INTELLIROUTE_RATE_LIMITER_PORT",   "default_port": 8002, "env": {}},
+    {
+        "module": "intelliroute.rate_limiter.main:app",
+        "port_env": "INTELLIROUTE_RATE_LIMITER_PORT",
+        "default_port": 8002,
+        "env": {
+            "RATE_LIMITER_REPLICA_ID": "rl-0",
+            "RATE_LIMITER_PEERS": "rl-1=http://127.0.0.1:8012,rl-2=http://127.0.0.1:8022",
+        },
+    },
+    {
+        "module": "intelliroute.rate_limiter.main:app",
+        "port_env": "_RL_REPLICA_1_PORT",
+        "default_port": 8012,
+        "env": {
+            "RATE_LIMITER_REPLICA_ID": "rl-1",
+            "RATE_LIMITER_PEERS": "rl-0=http://127.0.0.1:8002,rl-2=http://127.0.0.1:8022",
+        },
+    },
+    {
+        "module": "intelliroute.rate_limiter.main:app",
+        "port_env": "_RL_REPLICA_2_PORT",
+        "default_port": 8022,
+        "env": {
+            "RATE_LIMITER_REPLICA_ID": "rl-2",
+            "RATE_LIMITER_PEERS": "rl-0=http://127.0.0.1:8002,rl-1=http://127.0.0.1:8012",
+        },
+    },
     {"module": "intelliroute.cost_tracker.main:app",   "port_env": "INTELLIROUTE_COST_TRACKER_PORT",   "default_port": 8003, "env": {}},
     {"module": "intelliroute.health_monitor.main:app", "port_env": "INTELLIROUTE_HEALTH_MONITOR_PORT", "default_port": 8004, "env": {}},
     {"module": "intelliroute.router.main:app",         "port_env": "INTELLIROUTE_ROUTER_PORT",         "default_port": 8001, "env": {}},
