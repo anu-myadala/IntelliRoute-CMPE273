@@ -23,6 +23,7 @@ import time
 import uuid
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from ..common.logging import get_logger, log_event
@@ -58,6 +59,12 @@ COST_PER_1K = _env_float("MOCK_COST_PER_1K", 0.001)
 
 log = get_logger(NAME)
 app = FastAPI(title=f"IntelliRoute MockProvider {NAME}")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _state = {"force_fail": False}
 
@@ -67,11 +74,15 @@ async def health() -> dict:
     return {"status": "healthy" if not _state["force_fail"] else "degraded", "provider": NAME}
 
 
+class ForceFailBody(BaseModel):
+    fail: bool = True
+
+
 @app.post("/admin/force_fail")
-async def force_fail(on: bool = True) -> dict:
+async def force_fail(body: ForceFailBody = ForceFailBody()) -> dict:
     """Test hook: flip the provider into failing mode."""
-    _state["force_fail"] = on
-    return {"force_fail": on}
+    _state["force_fail"] = body.fail
+    return {"force_fail": body.fail}
 
 
 @app.post("/v1/chat", response_model=MockChatResponse)

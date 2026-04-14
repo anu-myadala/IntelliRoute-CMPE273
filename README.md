@@ -191,11 +191,25 @@ source .venv/bin/activate
 PYTHONPATH=. python3 scripts/start_stack.py
 ```
 
-You should see eight "starting ..." lines followed by
-`IntelliRoute stack running. Press Ctrl-C to stop.` Leave this
-terminal alone.
+You should see ten "starting ..." lines (gateway, router, 3 rate
+limiter replicas, health monitor, cost tracker, 3 mock providers) plus
+a frontend server, followed by:
 
-**Terminal 2 — run the demo client:**
+```
+IntelliRoute stack running.
+  Gateway:    http://127.0.0.1:8000
+  Frontend:   http://127.0.0.1:3000
+  Press Ctrl-C to stop.
+```
+
+Open **http://127.0.0.1:3000** in a browser to use the **live demo
+dashboard** — a dark-themed UI with a chat interface, provider health
+cards, routing visualization, cost tracker, and leader election status.
+The dashboard polls all backend services every 2 seconds and displays
+real-time metrics. It also has buttons to force-fail a provider, recover
+it, and run a 20-request burst test.
+
+**Terminal 2 — run the demo client (optional CLI alternative):**
 
 ```bash
 cd intelliroute

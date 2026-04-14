@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IntelliRoute - Distributed LLM Gateway</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-yellow: #d29922;
+            --accent-red: #f85149;
+            --accent-purple: #bc8ef9;
+            --glass-alpha: 0.08;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+            color: var(--text-primary);
+            overflow: hidden;
+            min-height: 100vh;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 30% 40% 30%;
+            height: 100vh;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-primary);
+        }
+
+        /* GLASS MORPHISM EFFECT */
+        .glass {
+            background: rgba(21, 27, 34, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(48, 54, 61, 0.5);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        /* LEFT PANEL - CHAT INTERFACE */
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            gap: 16px;
+        }
+
+        .chat-header {
+            padding: 16px;
+            background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(63, 185, 80, 0.05) 100%);
+            border-radius: 12px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .chat-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .chat-header p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 12px;
+            padding-right: 8px;
+        }
+
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: rgba(88, 166, 255, 0.3);
+            border-radius: 3px;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            background: rgba(88, 166, 255, 0.2);
+            border-left: 3px solid var(--accent-blue);
+            margin-left: 20px;
+            text-align: right;
+        }
+
+        .message.assistant {
+            background: rgba(63, 185, 80, 0.15);
+            border-left: 3px solid var(--accent-green);
+            margin-right: 20px;
+        }
+
+        .message-meta {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .message.assistant .message-meta {
+            justify-content: flex-start;
+        }
+
+        .message.user .message-meta {
+            justify-content: flex-end;
+        }
+
+        .meta-badge {
+            background: rgba(88, 166, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        .input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px;
+            background: rgba(33, 38, 45, 0.5);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .intent-selector {
+            display: flex;
+            gap: 6px;
+        }
+
+        select, input {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+
+        select:hover, input:hover {
+            border-color: var(--accent-blue);
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            min-height: 36px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .btn-send {
+            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+            color: #fff;
+            padding: 8px 20px;
+        }
+
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(88, 166, 255, 0.3);
+        }
+
+        .btn-send:active {
+            transform: translateY(0);
+        }
+
+        .btn-send.loading {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-demo {
+            background: rgba(210, 153, 34, 0.3);
+            color: var(--accent-yellow);
+            border: 1px solid var(--accent-yellow);
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 11px;
+        }
+
+        .btn-demo:hover {
+            background: rgba(210, 153, 34, 0.4);
+            box-shadow: 0 0 12px rgba(210, 153, 34, 0.3);
+        }
+
+        .btn-fail {
+            background: rgba(248, 81, 73, 0.3);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .btn-fail:hover {
+            background: rgba(248, 81, 73, 0.4);
+            box-shadow: 0 0 12px rgba(248, 81, 73, 0.3);
+        }
+
+        .btn-recover {
+            background: rgba(63, 185, 80, 0.3);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .btn-recover:hover {
+            background: rgba(63, 185, 80, 0.4);
+            box-shadow: 0 0 12px rgba(63, 185, 80, 0.3);
+        }
+
+        /* CENTER PANEL - VISUALIZATION */
+        .center-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            gap: 12px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0 8px;
+            margin-top: 4px;
+        }
+
+        .routing-flow {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .flow-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            z-index: 2;
+            position: relative;
+        }
+
+        .flow-step.active {
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .flow-step-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+        }
+
+        .flow-step.active .flow-step-icon {
+            border-color: var(--accent-blue);
+            background: rgba(88, 166, 255, 0.2);
+            box-shadow: 0 0 12px rgba(88, 166, 255, 0.4);
+        }
+
+        .flow-arrow {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+            top: 30px;
+            left: 0;
+            right: 0;
+        }
+
+        .provider-ranking {
+            display: flex;
+            gap: 8px;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+
+        .ranking-item {
+            flex: 1;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            border-left: 3px solid var(--border-color);
+            transition: var(--transition);
+        }
+
+        .ranking-item.selected {
+            border-left-color: var(--accent-green);
+            background: rgba(63, 185, 80, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(63, 185, 80, 0.2);
+        }
+
+        .ranking-item.failed {
+            border-left-color: var(--accent-red);
+            background: rgba(248, 81, 73, 0.15);
+        }
+
+        .ranking-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .ranking-score {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .score-bar {
+            height: 4px;
+            background: var(--bg-secondary);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 2px;
+            transition: width 0.5s ease-out;
+        }
+
+        .ranking-item.selected .score-fill {
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+        }
+
+        .provider-health {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .health-card {
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: var(--transition);
+        }
+
+        .health-card.active {
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 0 6px rgba(88, 166, 255, 0);
+            }
+        }
+
+        .health-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .health-name {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .circuit-breaker {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .circuit-breaker.closed {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        .circuit-breaker.open {
+            background: var(--accent-red);
+            box-shadow: 0 0 8px var(--accent-red);
+        }
+
+        .circuit-breaker.half-open {
+            background: var(--accent-yellow);
+            box-shadow: 0 0 8px var(--accent-yellow);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        .health-metric {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin: 6px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .metric-value {
+            color: var(--accent-blue);
+            font-weight: 500;
+            font-family: 'Courier New', monospace;
+        }
+
+        .queue-stats {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .queue-item {
+            flex: 1;
+            padding: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            text-align: center;
+            border-left: 3px solid var(--border-color);
+        }
+
+        .queue-item.high {
+            border-left-color: var(--accent-red);
+        }
+
+        .queue-item.medium {
+            border-left-color: var(--accent-yellow);
+        }
+
+        .queue-item.low {
+            border-left-color: var(--accent-blue);
+        }
+
+        .queue-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .queue-count {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: 'Courier New', monospace;
+        }
+
+        /* RIGHT PANEL - METRICS */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            gap: 12px;
+        }
+
+        .metric-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .metric-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .replica-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .replica-item {
+            padding: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-left: 3px solid var(--border-color);
+            transition: var(--transition);
+        }
+
+        .replica-item.leader {
+            border-left-color: var(--accent-yellow);
+            background: rgba(210, 153, 34, 0.15);
+        }
+
+        .replica-name {
+            font-size: 11px;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .replica-state {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .leader-badge {
+            font-size: 14px;
+            animation: float 2s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-4px);
+            }
+        }
+
+        .cost-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .cost-bar-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .cost-label {
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-secondary);
+        }
+
+        .cost-value {
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .cost-bar-fill {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .cost-progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 3px;
+            transition: width 0.5s ease-out;
+        }
+
+        .cost-total {
+            padding: 10px;
+            margin-top: 8px;
+            background: rgba(88, 166, 255, 0.1);
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .cost-total-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .cost-total-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            font-family: 'Courier New', monospace;
+        }
+
+        .event-log {
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 4px;
+            overflow-y: auto;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            flex: 1;
+        }
+
+        .event-log::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .event-log::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .event-log::-webkit-scrollbar-thumb {
+            background: rgba(88, 166, 255, 0.3);
+            border-radius: 3px;
+        }
+
+        .log-entry {
+            padding: 6px 8px;
+            border-radius: 4px;
+            animation: slideIn 0.3s ease-out;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .log-entry.routing {
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent-blue);
+            border-left: 2px solid var(--accent-blue);
+        }
+
+        .log-entry.rate-limit {
+            background: rgba(210, 153, 34, 0.15);
+            color: var(--accent-yellow);
+            border-left: 2px solid var(--accent-yellow);
+        }
+
+        .log-entry.fallback {
+            background: rgba(188, 142, 249, 0.15);
+            color: var(--accent-purple);
+            border-left: 2px solid var(--accent-purple);
+        }
+
+        .log-entry.error {
+            background: rgba(248, 81, 73, 0.15);
+            color: var(--accent-red);
+            border-left: 2px solid var(--accent-red);
+        }
+
+        .log-entry.success {
+            background: rgba(63, 185, 80, 0.15);
+            color: var(--accent-green);
+            border-left: 2px solid var(--accent-green);
+        }
+
+        /* Loading state */
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(88, 166, 255, 0.3);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin: 0 4px;
+        }
+
+        .status-indicator.online {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        .status-indicator.offline {
+            background: var(--accent-red);
+        }
+
+        .status-indicator.loading {
+            background: var(--accent-yellow);
+            animation: pulse 1s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- LEFT PANEL: CHAT INTERFACE -->
+        <div class="left-panel glass">
+            <div class="chat-header">
+                <h2>IntelliRoute Chat</h2>
+                <p>Distributed LLM Gateway Demo</p>
+            </div>
+
+            <div class="messages-container" id="messagesContainer"></div>
+
+            <div class="input-area">
+                <div class="intent-selector">
+                    <select id="intentSelect">
+                        <option value="interactive">Interactive (Real-time)</option>
+                        <option value="reasoning">Reasoning (Deep)</option>
+                        <option value="batch">Batch (Cost-optimized)</option>
+                        <option value="code">Code (Specialized)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="messageInput" placeholder="Ask me anything..." />
+                    <button class="btn-send" id="sendBtn">Send</button>
+                </div>
+
+                <div class="demo-controls">
+                    <button class="btn-demo btn-fail" id="forceFailBtn">Force Fail</button>
+                    <button class="btn-demo btn-recover" id="recoverBtn">Recover</button>
+                    <button class="btn-demo" id="burstTestBtn" style="background: rgba(63, 185, 80, 0.3); color: var(--accent-green); border: 1px solid var(--accent-green);">Burst Test (20)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER PANEL: VISUALIZATION -->
+        <div class="center-panel glass">
+            <div style="flex: 0 0 auto;">
+                <div class="section-title">🔀 Routing Decision Flow</div>
+                <div class="flow-diagram">
+                    <div class="flow-step" id="step-request">
+                        <div class="flow-step-icon">📥</div>
+                        <span>Request</span>
+                    </div>
+                    <div class="flow-step" id="step-intent">
+                        <div class="flow-step-icon">🧠</div>
+                        <span>Classify</span>
+                    </div>
+                    <div class="flow-step" id="step-rank">
+                        <div class="flow-step-icon">📊</div>
+                        <span>Rank</span>
+                    </div>
+                    <div class="flow-step" id="step-select">
+                        <div class="flow-step-icon">✓</div>
+                        <span>Select</span>
+                    </div>
+                    <div class="flow-step" id="step-response">
+                        <div class="flow-step-icon">📤</div>
+                        <span>Response</span>
+                    </div>
+                    <div class="flow-arrow"></div>
+                </div>
+
+                <div class="provider-ranking" id="providerRanking"></div>
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div class="section-title">🏥 Provider Health</div>
+                <div class="provider-health" id="providerHealth"></div>
+            </div>
+
+            <div style="flex: 0 0 auto;">
+                <div class="section-title">📋 Request Queue</div>
+                <div class="queue-stats" id="queueStats"></div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: SYSTEM METRICS -->
+        <div class="right-panel glass">
+            <div class="metric-section">
+                <div class="section-title">👑 Leader Election</div>
+                <div class="metric-card">
+                    <div class="replica-list" id="replicaList"></div>
+                </div>
+            </div>
+
+            <div class="metric-section">
+                <div class="section-title">💰 Cost Tracker</div>
+                <div class="metric-card">
+                    <div class="cost-bars" id="costBars"></div>
+                    <div class="cost-total">
+                        <div class="cost-total-label">Total Spend</div>
+                        <div class="cost-total-value" id="totalCost">$0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-section">
+                <div class="section-title">📡 System Events</div>
+                <div class="metric-card">
+                    <div class="event-log" id="eventLog"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';       // Gateway
+        const ROUTER_API = 'http://localhost:8001';     // Router (feedback, queue)
+        const RATE_LIMITER_API = 'http://localhost:8002'; // Rate limiter rl-0
+        const HEALTH_API = 'http://localhost:8004';     // Health monitor
+        const COST_API = 'http://localhost:8003';       // Cost tracker
+        const ADMIN_API = 'http://localhost:9002';      // mock-smart (force_fail)
+        const RL_PORTS = [8002, 8012, 8022];            // Rate limiter replicas
+
+        const state = {
+            providers: ['mock-fast', 'mock-smart', 'mock-cheap'],
+            currentFlow: 'request',
+            messages: [],
+            costs: { 'mock-fast': 0, 'mock-smart': 0, 'mock-cheap': 0 },
+            healthStates: {
+                'mock-fast': { cb: 'closed', latency: 0, success: 0, anomaly: 0 },
+                'mock-smart': { cb: 'closed', latency: 0, success: 0, anomaly: 0 },
+                'mock-cheap': { cb: 'closed', latency: 0, success: 0, anomaly: 0 }
+            },
+            queue: { total_depth: 0, by_priority: { HIGH: 0, MEDIUM: 0, LOW: 0 }, shed_count: 0, timeout_count: 0 },
+            replicas: [
+                { id: 'rl-0', state: 'follower', leader: 'rl-0', port: 8002 },
+                { id: 'rl-1', state: 'follower', leader: 'rl-0', port: 8012 },
+                { id: 'rl-2', state: 'follower', leader: 'rl-0', port: 8022 }
+            ],
+            rateLimitTokens: 1000,
+            failedProvider: false
+        };
+
+        // Initialize
+        function init() {
+            renderProviderRanking();
+            renderProviderHealth();
+            renderQueueStats();
+            renderReplicas();
+            renderCostBars();
+            renderEventLog();
+
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            document.getElementById('sendBtn').addEventListener('click', sendMessage);
+            document.getElementById('forceFailBtn').addEventListener('click', forceFailProvider);
+            document.getElementById('recoverBtn').addEventListener('click', recoverProvider);
+            document.getElementById('burstTestBtn').addEventListener('click', burstTest);
+
+            setInterval(updateMetrics, 2000);
+            updateMetrics();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            if (!content) return;
+
+            const intent = document.getElementById('intentSelect').value;
+
+            // Add user message
+            addMessage('user', content);
+            input.value = '';
+            document.getElementById('sendBtn').classList.add('loading');
+
+            // Animate flow
+            animateFlow();
+
+            try {
+                const response = await fetch(`${API_BASE}/v1/complete`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': 'demo-key-123'
+                    },
+                    body: JSON.stringify({
+                        intent,
+                        messages: [{ role: 'user', content }]
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || `API error: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // Add assistant message with metadata
+                addMessage('assistant', data.content, {
+                    provider: data.provider,
+                    latency: data.latency_ms,
+                    attempts: data.fallback_used ? '2+' : '1'
+                });
+
+                addEvent('routing', `Route to ${data.provider} (${data.latency_ms}ms, $${(data.estimated_cost_usd || 0).toFixed(4)})`);
+                highlightProvider(data.provider);
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('assistant', `Error: ${error.message}`);
+                addEvent('error', `Request failed: ${error.message}`);
+            }
+
+            document.getElementById('sendBtn').classList.remove('loading');
+            updateMetrics();
+        }
+
+        function animateFlow() {
+            const steps = ['request', 'intent', 'rank', 'select', 'response'];
+            steps.forEach((step, i) => {
+                const elem = document.getElementById(`step-${step}`);
+                setTimeout(() => {
+                    elem.classList.add('active');
+                    setTimeout(() => elem.classList.remove('active'), 300);
+                }, i * 150);
+            });
+        }
+
+        function addMessage(role, content, meta = {}) {
+            const container = document.getElementById('messagesContainer');
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+
+            let metaHtml = '';
+            if (meta.provider) {
+                metaHtml += `<span class="meta-badge">🔗 ${meta.provider}</span>`;
+            }
+            if (meta.latency) {
+                metaHtml += `<span class="meta-badge">⏱ ${meta.latency}ms</span>`;
+            }
+            if (meta.attempts) {
+                metaHtml += `<span class="meta-badge">🔄 ${meta.attempts} attempt(s)</span>`;
+            }
+
+            div.innerHTML = `
+                <div>${escapeHtml(content)}</div>
+                ${metaHtml ? `<div class="message-meta">${metaHtml}</div>` : ''}
+            `;
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+
+            state.messages.push({ role, content, meta });
+        }
+
+        function renderProviderRanking() {
+            const container = document.getElementById('providerRanking');
+            container.innerHTML = state.providers.map(p => `
+                <div class="ranking-item" id="rank-${p}">
+                    <div class="ranking-label">${p.replace('mock-', '').toUpperCase()}</div>
+                    <div class="ranking-score" id="score-${p}">0.00</div>
+                    <div class="score-bar">
+                        <div class="score-fill" id="fill-${p}" style="width: 0%"></div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Simulate random scores
+            state.providers.forEach(p => {
+                const score = Math.random() * 100;
+                document.getElementById(`score-${p}`).textContent = score.toFixed(2);
+                document.getElementById(`fill-${p}`).style.width = score + '%';
+            });
+        }
+
+        function renderProviderHealth() {
+            const container = document.getElementById('providerHealth');
+            container.innerHTML = state.providers.map(p => `
+                <div class="health-card" id="health-${p}">
+                    <div class="health-header">
+                        <span class="health-name">${p.replace('mock-', '')}</span>
+                        <div class="circuit-breaker closed" id="cb-${p}"></div>
+                    </div>
+                    <div class="health-metric">
+                        <span>Latency:</span>
+                        <span class="metric-value" id="latency-${p}">0ms</span>
+                    </div>
+                    <div class="health-metric">
+                        <span>Success:</span>
+                        <span class="metric-value" id="success-${p}">0%</span>
+                    </div>
+                    <div class="health-metric">
+                        <span>Anomaly:</span>
+                        <span class="metric-value" id="anomaly-${p}">0.0</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderQueueStats() {
+            const container = document.getElementById('queueStats');
+            container.innerHTML = `
+                <div class="queue-item high" id="queue-high">
+                    <div class="queue-label">HIGH</div>
+                    <div class="queue-count" id="queue-high-count">0</div>
+                </div>
+                <div class="queue-item medium" id="queue-medium">
+                    <div class="queue-label">MEDIUM</div>
+                    <div class="queue-count" id="queue-medium-count">0</div>
+                </div>
+                <div class="queue-item low" id="queue-low">
+                    <div class="queue-label">LOW</div>
+                    <div class="queue-count" id="queue-low-count">0</div>
+                </div>
+            `;
+        }
+
+        function renderReplicas() {
+            const container = document.getElementById('replicaList');
+            container.innerHTML = state.replicas.map(r => `
+                <div class="replica-item" id="replica-${r.id}">
+                    <div>
+                        <div class="replica-name">${r.id}</div>
+                        <div class="replica-state" id="state-${r.id}">follower</div>
+                    </div>
+                    <div id="badge-${r.id}"></div>
+                </div>
+            `).join('');
+        }
+
+        function renderCostBars() {
+            const container = document.getElementById('costBars');
+            container.innerHTML = state.providers.map(p => `
+                <div class="cost-bar-item">
+                    <div class="cost-label">
+                        <span>${p.replace('mock-', '').toUpperCase()}</span>
+                        <span class="cost-value" id="cost-${p}">$0.00</span>
+                    </div>
+                    <div class="cost-bar-fill">
+                        <div class="cost-progress" id="progress-${p}" style="width: 0%"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderEventLog() {
+            const container = document.getElementById('eventLog');
+            container.innerHTML = '<div class="log-entry success">System initialized</div>';
+        }
+
+        function addEvent(type, message) {
+            const log = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${message}`;
+            log.insertBefore(entry, log.firstChild);
+
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        function highlightProvider(provider) {
+            state.providers.forEach(p => {
+                const item = document.getElementById(`rank-${p}`);
+                const health = document.getElementById(`health-${p}`);
+                item.classList.remove('selected', 'failed');
+                health.classList.remove('active');
+            });
+
+            document.getElementById(`rank-${provider}`).classList.add('selected');
+            document.getElementById(`health-${provider}`).classList.add('active');
+        }
+
+        async function updateMetrics() {
+            // 1. Fetch health monitor snapshot (circuit breaker states)
+            try {
+                const r = await fetch(`${HEALTH_API}/snapshot`);
+                if (r.ok) {
+                    const snapshot = await r.json();
+                    state.providers.forEach(p => {
+                        const h = snapshot[p];
+                        if (h) {
+                            const cb = document.getElementById(`cb-${p}`);
+                            const cbState = h.circuit_state || 'closed';
+                            cb.className = `circuit-breaker ${cbState === 'half_open' ? 'half-open' : cbState}`;
+                        }
+                    });
+                }
+            } catch (e) { /* health monitor not yet up */ }
+
+            // 2. Fetch feedback metrics (EMA latency, success, anomaly)
+            try {
+                const r = await fetch(`${ROUTER_API}/feedback`);
+                if (r.ok) {
+                    const metrics = await r.json();
+                    state.providers.forEach(p => {
+                        const m = metrics[p];
+                        if (m) {
+                            document.getElementById(`latency-${p}`).textContent = Math.round(m.latency_ema) + 'ms';
+                            document.getElementById(`success-${p}`).textContent = Math.round(m.success_rate_ema * 100) + '%';
+                            document.getElementById(`anomaly-${p}`).textContent = m.anomaly_score.toFixed(2);
+                        }
+                    });
+                }
+            } catch (e) { /* router not yet up */ }
+
+            // 3. Fetch queue stats
+            try {
+                const r = await fetch(`${ROUTER_API}/queue/stats`);
+                if (r.ok) {
+                    const q = await r.json();
+                    const hp = document.getElementById('queue-high-count');
+                    const mp = document.getElementById('queue-medium-count');
+                    const lp = document.getElementById('queue-low-count');
+                    if (hp) hp.textContent = q.by_priority?.HIGH ?? 0;
+                    if (mp) mp.textContent = q.by_priority?.MEDIUM ?? 0;
+                    if (lp) lp.textContent = q.by_priority?.LOW ?? 0;
+                }
+            } catch (e) {}
+
+            // 4. Fetch cost summary
+            try {
+                const r = await fetch(`${API_BASE}/v1/cost/summary?tenant_id=demo-tenant`, {
+                    headers: { 'X-API-Key': 'demo-key-123' }
+                });
+                if (r.ok) {
+                    const cost = await r.json();
+                    const perProvider = cost.per_provider || {};
+                    let maxCost = 0.001;
+                    state.providers.forEach(p => {
+                        const c = perProvider[p] || 0;
+                        state.costs[p] = c;
+                        maxCost = Math.max(maxCost, c);
+                    });
+                    state.providers.forEach(p => {
+                        const c = state.costs[p];
+                        document.getElementById(`cost-${p}`).textContent = '$' + c.toFixed(4);
+                        document.getElementById(`progress-${p}`).style.width = ((c / maxCost) * 100) + '%';
+                    });
+                    const totalCost = cost.total_spent || Object.values(state.costs).reduce((a, b) => a + b, 0);
+                    document.getElementById('totalCost').textContent = '$' + totalCost.toFixed(4);
+                }
+            } catch (e) {}
+
+            // 5. Fetch leader election status from all replicas
+            for (let i = 0; i < RL_PORTS.length; i++) {
+                const port = RL_PORTS[i];
+                const rid = `rl-${i}`;
+                try {
+                    const r = await fetch(`http://localhost:${port}/election/status`);
+                    if (r.ok) {
+                        const data = await r.json();
+                        const item = document.getElementById(`replica-${rid}`);
+                        const badge = document.getElementById(`badge-${rid}`);
+                        const stateEl = document.getElementById(`state-${rid}`);
+
+                        if (data.is_leader || data.state === 'leader') {
+                            item.classList.add('leader');
+                            badge.textContent = '👑';
+                            stateEl.textContent = 'leader';
+                        } else {
+                            item.classList.remove('leader');
+                            badge.textContent = '';
+                            stateEl.textContent = data.state || 'follower';
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+
+        async function forceFailProvider() {
+            try {
+                await fetch(`${ADMIN_API}/admin/force_fail`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fail: true })
+                });
+                state.failedProvider = true;
+                addEvent('error', 'Provider forced to fail');
+                document.getElementById('forceFailBtn').style.opacity = '0.5';
+            } catch (error) {
+                addEvent('error', 'Failed to force provider failure');
+            }
+        }
+
+        async function recoverProvider() {
+            try {
+                await fetch(`${ADMIN_API}/admin/force_fail`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fail: false })
+                });
+                state.failedProvider = false;
+                addEvent('success', 'Provider recovered');
+                document.getElementById('forceFailBtn').style.opacity = '1';
+            } catch (error) {
+                addEvent('error', 'Failed to recover provider');
+            }
+        }
+
+        async function burstTest() {
+            addEvent('rate-limit', 'Burst test started (20 requests)');
+            const btn = document.getElementById('burstTestBtn');
+            btn.disabled = true;
+            btn.textContent = 'Burst Test (running...)';
+
+            for (let i = 0; i < 20; i++) {
+                const intent = ['interactive', 'reasoning', 'batch', 'code'][Math.floor(Math.random() * 4)];
+                try {
+                    const response = await fetch(`${API_BASE}/v1/complete`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-API-Key': 'demo-key-123'
+                        },
+                        body: JSON.stringify({
+                            intent,
+                            messages: [{ role: 'user', content: `Burst request ${i + 1}/20` }]
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        addEvent('routing', `[Burst ${i + 1}] → ${data.provider} (${data.latency_ms}ms)`);
+                    } else {
+                        const code = response.status;
+                        addEvent(code === 429 ? 'rate-limit' : 'error', `[Burst ${i + 1}] HTTP ${code}`);
+                    }
+                } catch (error) {
+                    addEvent('error', `Burst request ${i + 1} failed`);
+                }
+
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Burst Test (20)';
+            addEvent('success', 'Burst test completed');
+            updateMetrics();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>

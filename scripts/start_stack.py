@@ -104,7 +104,22 @@ def main() -> int:
             procs.append(subprocess.Popen(cmd, env=env, cwd=str(ROOT)))
             time.sleep(0.15)
 
-        print("\nIntelliRoute stack running. Press Ctrl-C to stop.\n")
+        # Start a simple HTTP server for the frontend UI
+        frontend_port = int(os.environ.get("INTELLIROUTE_FRONTEND_PORT", "3000"))
+        frontend_dir = str(ROOT / "frontend")
+        if os.path.isdir(frontend_dir):
+            frontend_cmd = [
+                sys.executable, "-m", "http.server",
+                str(frontend_port), "--directory", frontend_dir,
+                "--bind", os.environ.get("INTELLIROUTE_HOST", "127.0.0.1"),
+            ]
+            print(f"starting frontend on :{frontend_port}")
+            procs.append(subprocess.Popen(frontend_cmd, env=base_env, cwd=str(ROOT)))
+
+        print(f"\nIntelliRoute stack running.")
+        print(f"  Gateway:    http://127.0.0.1:8000")
+        print(f"  Frontend:   http://127.0.0.1:{frontend_port}")
+        print(f"  Press Ctrl-C to stop.\n")
         while True:
             time.sleep(1.0)
     except KeyboardInterrupt:

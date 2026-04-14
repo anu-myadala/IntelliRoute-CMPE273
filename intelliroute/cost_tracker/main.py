@@ -8,6 +8,7 @@ gateway can query via ``/summary/{tenant}``.
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from ..common.logging import get_logger, log_event
@@ -17,6 +18,12 @@ from .accounting import CostAccountant
 log = get_logger("cost_tracker")
 accountant = CostAccountant()
 app = FastAPI(title="IntelliRoute CostTracker")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

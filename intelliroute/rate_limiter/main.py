@@ -27,6 +27,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from ..common.logging import get_logger, log_event
@@ -71,6 +72,12 @@ election = LeaderElection(
 )
 
 app = FastAPI(title="IntelliRoute RateLimiter")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 _http: Optional[httpx.AsyncClient] = None
 
 

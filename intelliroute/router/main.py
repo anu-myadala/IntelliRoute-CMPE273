@@ -21,6 +21,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from ..common.config import settings
@@ -49,6 +50,12 @@ request_queue = RequestQueue()
 _WORKER_COUNT = 4
 
 app = FastAPI(title="IntelliRoute Router")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 _http: Optional[httpx.AsyncClient] = None
 

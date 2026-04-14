@@ -20,6 +20,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from ..common.config import settings
 from ..common.logging import get_logger, log_event
@@ -35,6 +36,12 @@ API_KEYS: dict[str, str] = {
 }
 
 app = FastAPI(title="IntelliRoute Gateway")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 _http: Optional[httpx.AsyncClient] = None
 
 

@@ -12,6 +12,7 @@ import time
 
 import httpx
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from ..common.logging import get_logger, log_event
 from ..common.models import ProviderHealth
@@ -24,6 +25,12 @@ provider_urls: dict[str, str] = {}
 _config = CircuitBreakerConfig(failure_threshold=3, open_duration_s=5, half_open_success_required=2)
 
 app = FastAPI(title="IntelliRoute HealthMonitor")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _get_breaker(name: str) -> CircuitBreaker:
