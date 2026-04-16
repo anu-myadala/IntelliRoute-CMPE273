@@ -958,7 +958,8 @@
                         'X-API-Key': 'demo-key-123'
                     },
                     body: JSON.stringify({
-                        intent,
+                        tenant_id: 'anonymous',
+                        intent_hint: intent,
                         messages: [{ role: 'user', content }]
                     })
                 });
@@ -1168,7 +1169,8 @@
             try {
                 const r = await fetch(`${ROUTER_API}/feedback`);
                 if (r.ok) {
-                    const metrics = await r.json();
+                    const data = await r.json();
+                    const metrics = data.metrics || data;
                     state.providers.forEach(p => {
                         const m = metrics[p];
                         if (m) {
@@ -1201,7 +1203,7 @@
                 });
                 if (r.ok) {
                     const cost = await r.json();
-                    const perProvider = cost.per_provider || {};
+                    const perProvider = cost.by_provider || cost.per_provider || {};
                     let maxCost = 0.001;
                     state.providers.forEach(p => {
                         const c = perProvider[p] || 0;
@@ -1213,7 +1215,7 @@
                         document.getElementById(`cost-${p}`).textContent = '$' + c.toFixed(4);
                         document.getElementById(`progress-${p}`).style.width = ((c / maxCost) * 100) + '%';
                     });
-                    const totalCost = cost.total_spent || Object.values(state.costs).reduce((a, b) => a + b, 0);
+                    const totalCost = cost.total_cost_usd || cost.total_spent || Object.values(state.costs).reduce((a, b) => a + b, 0);
                     document.getElementById('totalCost').textContent = '$' + totalCost.toFixed(4);
                 }
             } catch (e) {}
@@ -1290,7 +1292,8 @@
                             'X-API-Key': 'demo-key-123'
                         },
                         body: JSON.stringify({
-                            intent,
+                            tenant_id: 'anonymous',
+                            intent_hint: intent,
                             messages: [{ role: 'user', content: `Burst request ${i + 1}/20` }]
                         })
                     });
