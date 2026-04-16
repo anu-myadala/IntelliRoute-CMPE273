@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Intent(str, Enum):
@@ -33,13 +33,20 @@ class CompletionRequest(BaseModel):
     """A unified request format that mirrors the common shape of LLM APIs."""
 
     tenant_id: str = Field(..., description="Identifier of the calling tenant/team")
-    messages: list[ChatMessage]
-    max_tokens: int = 256
-    temperature: float = 0.7
+    messages: list[ChatMessage] = Field(..., min_length=1)
+    max_tokens: int = Field(256, ge=1, le=4096)
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
     # Optional explicit hint from the caller
     intent_hint: Optional[Intent] = None
     # Caller can set a hard latency budget in ms; router may use it to pick faster models
-    latency_budget_ms: Optional[int] = None
+    latency_budget_ms: Optional[int] = Field(None, ge=100, le=30000)
+
+    @field_validator("tenant_id")
+    @classmethod
+    def tenant_id_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("tenant_id must not be blank")
+        return v
 
 
 class CompletionResponse(BaseModel):
