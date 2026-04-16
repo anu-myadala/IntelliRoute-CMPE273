@@ -1464,8 +1464,12 @@
 
                 } catch (error) {
                     console.error('Error:', error);
-                    this.addMessage('assistant', `⚠️ ${error.message}`);
-                    this.addEvent('error', `✗ Request failed: ${error.message}`);
+                    const isOffline = error.message.includes('Failed to fetch') || error.message.includes('NetworkError');
+                    const userMsg = isOffline
+                        ? '⚠️ Backend services are offline. Start the stack with: python scripts/start_stack.py'
+                        : `⚠️ ${error.message}`;
+                    this.addMessage('assistant', userMsg);
+                    this.addEvent('error', isOffline ? '✗ Services unreachable' : `✗ ${error.message}`);
                     this.playSound('error');
                 }
 
@@ -1560,7 +1564,7 @@
                         this.playSound('error');
                     }
                 } catch (e) {
-                    console.error('Force fail error:', e);
+                    this.addEvent('error', 'Cannot inject failure — services offline');
                 }
             },
 
@@ -1576,7 +1580,7 @@
                         this.playSound('success');
                     }
                 } catch (e) {
-                    console.error('Recover error:', e);
+                    this.addEvent('error', 'Cannot recover — services offline');
                 }
             },
 
