@@ -1421,6 +1421,7 @@
 
                 const intentHint = document.getElementById('intentSelect').value;
                 this.addMessage('user', content);
+                const savedInput = content;
                 input.value = '';
 
                 const welcomeSection = document.getElementById('welcomeSection');
@@ -1481,6 +1482,7 @@
                     this.addMessage('assistant', userMsg);
                     this.addEvent('error', isOffline ? '✗ Services unreachable' : `✗ ${error.message}`);
                     this.playSound('error');
+                    input.value = savedInput;
                 }
 
                 document.getElementById('sendBtn').classList.remove('loading');

@@ -226,7 +226,7 @@ def test_router_decide_endpoint_returns_ranking(stack):
 def test_failover_when_top_provider_is_down(stack):
     # Force mock-fast into failing mode, then issue an interactive prompt.
     # The router should fall back to the next provider in the ranked list.
-    r = httpx.post(f"{stack.mock_url('mock_fast')}/admin/force_fail", params={"on": "true"}, timeout=5.0)
+    r = httpx.post(f"{stack.mock_url('mock_fast')}/admin/force_fail", json={"fail": True}, timeout=5.0)
     assert r.status_code == 200
     try:
         body = None
@@ -241,7 +241,7 @@ def test_failover_when_top_provider_is_down(stack):
         assert body["provider"] != "mock-fast"
         assert body["fallback_used"] is True
     finally:
-        httpx.post(f"{stack.mock_url('mock_fast')}/admin/force_fail", params={"on": "false"}, timeout=5.0)
+        httpx.post(f"{stack.mock_url('mock_fast')}/admin/force_fail", json={"fail": False}, timeout=5.0)
 
 
 def test_rate_limiter_throttles_when_bucket_drained(stack):
