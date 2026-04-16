@@ -1211,9 +1211,18 @@
                 document.getElementById('soundToggle').textContent = this.state.soundEnabled ? '🔊' : '🔇';
             },
 
+            _audioCtx: null,
+            _getAudioCtx() {
+                if (!this._audioCtx) {
+                    this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                return this._audioCtx;
+            },
+
             playSound(type) {
                 if (!this.state.soundEnabled) return;
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                try {
+                const audioContext = this._getAudioCtx();
                 const oscillator = audioContext.createOscillator();
                 const gainNode = audioContext.createGain();
                 oscillator.connect(gainNode);
@@ -1244,6 +1253,7 @@
                         oscillator.stop(now + 0.2);
                         break;
                 }
+                } catch (e) { /* audio not available */ }
             },
 
             async checkServices() {
@@ -1661,10 +1671,11 @@
                     if (healthRes.status === 'fulfilled' && healthRes.value.ok) {
                         const snapshot = await healthRes.value.json();
                         Object.entries(snapshot).forEach(([provider, health]) => {
+                            const cbState = (health.circuit_state || 'closed').replace('_', '-');
                             this.state.healthStates[provider] = {
-                                cb: health.circuit_state || 'closed',
-                                latency: health.latency || 0,
-                                success: health.healthy ? 1.0 : 0.0,
+                                cb: cbState,
+                                latency: health.avg_latency_ms || 0,
+                                success: 1.0 - (health.error_rate || 0),
                                 anomaly: health.error_rate || 0
                             };
                         });

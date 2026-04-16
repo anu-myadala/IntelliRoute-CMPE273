@@ -99,9 +99,12 @@ async def cost_summary(
 ) -> CostSummary:
     tenant = _auth(x_api_key)
     assert _http is not None
-    r = await _http.get(f"{settings.cost_tracker_url}/summary/{tenant}")
-    r.raise_for_status()
-    return CostSummary(**r.json())
+    try:
+        r = await _http.get(f"{settings.cost_tracker_url}/summary/{tenant}")
+        r.raise_for_status()
+        return CostSummary(**r.json())
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"cost tracker unavailable: {exc}")
 
 
 @app.get("/v1/system/health")
